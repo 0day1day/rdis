@@ -1,10 +1,12 @@
 Rdis is a Binary Analysis Tool for Linux.
 
 More information can be found here: http://rainbowsandpwnies.com/rdis/
+Support available at irc.freenode.net#haxathon
 
 -----------------------------------------------------------
 
 // BUILDING
+// Choose language when compiling. Current supported languages : English and Brazilian Portuguese
 
 Dependencies: gtk3, luajit, cairo, jansson
 Optional Dependencies (in case you plan to use rdis-lua scripts and the GDB backend) : lua51-socket
@@ -12,6 +14,8 @@ Optional Dependencies (in case you plan to use rdis-lua scripts and the GDB back
 There's not autoconf for rdis, so you may need to make some changes to get it
 to build on your platform. Rdis is developed in Arch Linux and should work fine
 with Arch.
+
+PKGBUILD Available At AUR : https://aur.archlinux.org/packages/rdis/
 
 -----------------------------------------------------------
 

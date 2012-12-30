@@ -1,0 +1,10 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=rdis (need root)
+GenericName=GUI Binary Analysis Tool
+TryExec=/usr/share/rdis/su-to-rdis.sh
+Exec=/usr/bin/rdis %F
+Terminal=false
+Type=Application
+Categories=Application;System;
+Comment=A great graphic binary analysis tool that's in-development and constantly being improved
