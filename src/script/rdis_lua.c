@@ -54,13 +54,15 @@ static const struct luaL_Reg rl_graph_node_lib_m [] = {
 
 
 static const struct luaL_Reg rl_rdis_lib_f [] = {
-    {"console",   rl_rdis_console},
-    {"functions", rl_rdis_functions},
-    {"peek",      rl_rdis_peek},
-    {"poke",      rl_rdis_poke},
-    {"node",      rl_rdis_node},
-    {"load",      rl_rdis_load},
-    {"loader",    rl_rdis_loader},
+    {"console",            rl_rdis_console},
+    {"functions",          rl_rdis_functions},
+    {"peek",               rl_rdis_peek},
+    {"poke",               rl_rdis_poke},
+    {"node",               rl_rdis_node},
+    {"load",               rl_rdis_load},
+    {"loader",             rl_rdis_loader},
+    {"set_function_label", rl_rdis_set_function_label},
+    {"user_function",      rl_rdis_user_function},
     {NULL, NULL}
 };
 
@@ -790,4 +792,38 @@ int rl_rdis_loader (lua_State * L)
     lua_pop(L, 1);
     lua_pushboolean(L, 1);
     return 1;
+}
+
+
+int rl_rdis_set_function_label (lua_State * L)
+{
+    struct _rdis_lua * rdis_lua = rl_get_rdis_lua(L);
+
+    uint64_t address  = rl_check_uint64(L, -2);
+    const char * text = luaL_checkstring(L, -1);
+    lua_pop(L, 2);
+
+    struct _label * label = map_fetch(rdis_lua->rdis->labels, address);
+
+    if (label == NULL) {
+        luaL_error(L, "could not find function label at given address");
+        return 0;
+    }
+
+    label_set_text(label, text);
+
+    return 0;
+}
+
+
+int rl_rdis_user_function (lua_State * L)
+{
+    struct _rdis_lua * rdis_lua = rl_get_rdis_lua(L);
+
+    uint64_t address  = rl_check_uint64(L, -1);
+    lua_pop(L, 1);
+
+    rdis_user_function(rdis_lua->rdis, address);
+
+    return 0;
 }
