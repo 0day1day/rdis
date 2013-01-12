@@ -21,6 +21,7 @@
 #define LANG_REACHABLE     "Reachable"
 #define LANG_REFERENCES    "References"
 #define LANG_REFERENCERS   "Referencers"
+#define LANG_REMOVEALLAFTER "Remove All After"
 #define LANG_REMOVEFUNC    "Remove Function"
 #define LANG_SAVERDIS      "Save .rdis"
 #define LANG_SAVERDISFILE  "Safe Rdis File"
