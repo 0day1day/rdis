@@ -9,14 +9,15 @@ Support available at irc.freenode.net#haxathon
 // Choose language when compiling. Current supported languages : English and Brazilian Portuguese
 
 Dependencies: gtk3, luajit, cairo, jansson
-Optional Dependencies (in case you plan to use rdis-lua scripts and the GDB backend) : lua51-socket
+Optional Dependencies (in case you plan to use rdis-lua scripts and the GDB backend) : lua51-socket and lua-lgi compiled with lua5.1
+
 
 There's not autoconf for rdis, so you may need to make some changes to get it
 to build on your platform. Rdis is developed in Arch Linux and should work fine
 with Arch.
 
 PKGBUILD Available At AUR : https://aur.archlinux.org/packages/rdis/
-
+For lua-lgi, use ABS to get the PKGBUILD from the community and sed -i s/5.2/5.1
 -----------------------------------------------------------
 
 // LICENSE
