@@ -1,0 +1,9 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=rdis
+GenericName=GUI Binary Analysis Tool
+Exec=/usr/bin/rdis %F
+Terminal=false
+Type=Application
+Categories=Application;System;
+Comment=A great graphic binary analysis tool that's in-development and constantly being improved
