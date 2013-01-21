@@ -166,6 +166,9 @@ struct _rdgwindow * rdgwindow_create (struct _gui * gui,
                                         RDIS_CALLBACK_GRAPH_NODE
                                         | RDIS_CALLBACK_LABEL);
 
+    gtk_widget_show_all(rdgwindow->window);
+    rdgwindow_center_on_node(rdgwindow, top_index);
+
     return rdgwindow;
 }
 
@@ -496,7 +499,6 @@ gboolean rdgwindow_image_key_press_event (GtkWidget * widget,
                                           GdkEventKey * event,
                                           struct _rdgwindow * rdgwindow)
 {
-    // key 'p'
     if ((event->keyval == ';') && (rdgwindow->selected_ins != -1)) {
         rdgwindow->editing = 1;
         return FALSE;
@@ -561,8 +563,11 @@ gboolean rdgwindow_image_key_press_event (GtkWidget * widget,
         return FALSE;
     }
 
-    if (event->keyval == 0x70) {
+    if (event->keyval == 'p') {
         rdgwindow_color_node_predecessors(rdgwindow);
+    }
+    else if (event->keyval == 's') {
+        rdgwindow_save(rdgwindow);
     }
 
     return FALSE;
@@ -575,6 +580,36 @@ void rdgwindow_size_allocate_event (GtkWidget * widget,
 {
     rdgwindow->scrolledWindow_width  = allocation->width;
     rdgwindow->scrolledWindow_height = allocation->height;
+}
+
+
+void rdgwindow_center_on_node (struct _rdgwindow * rdgwindow, uint64_t index)
+{
+    GtkAdjustment * ha = gtk_scrolled_window_get_hadjustment(
+                             GTK_SCROLLED_WINDOW(rdgwindow->scrolledWindow));
+    GtkAdjustment * va = gtk_scrolled_window_get_vadjustment(
+                             GTK_SCROLLED_WINDOW(rdgwindow->scrolledWindow));
+
+    double width  = rdg_width(rdgwindow->rdg);
+    double height = rdg_height(rdgwindow->rdg);
+    int    xx     = rdg_node_x(rdgwindow->rdg, index);
+    int    yy     = rdg_node_y(rdgwindow->rdg, index);
+
+    printf("xx=%d, yy=%d\n", xx, yy);
+
+    if ((xx == -1) || (yy == -1))
+        return;
+
+    double x = xx;
+    double y = yy;
+
+    gtk_adjustment_set_value(ha, gtk_adjustment_get_upper(ha) * (x / width));
+    gtk_adjustment_set_value(va, gtk_adjustment_get_upper(va) * (y / height));
+
+    gtk_scrolled_window_set_hadjustment(
+                             GTK_SCROLLED_WINDOW(rdgwindow->scrolledWindow), ha);
+    gtk_scrolled_window_set_vadjustment(
+                             GTK_SCROLLED_WINDOW(rdgwindow->scrolledWindow), va);
 }
 
 
@@ -750,4 +785,34 @@ void rdgwindow_remove_all_after (GtkMenuItem * menuItem,
 
     printf("remove all after click on %llx\n",
            (unsigned long long) rdgwindow->selected_ins);
+}
+
+
+
+void rdgwindow_save (struct _rdgwindow * rdgwindow)
+{
+    GtkWidget * dialog;
+
+    dialog = gtk_file_chooser_dialog_new(LANG_SAVE_RDG_AS_PNG,
+                                         GTK_WINDOW(rdgwindow->window),
+                                         GTK_FILE_CHOOSER_ACTION_SAVE,
+                                         GTK_STOCK_CANCEL,
+                                         GTK_RESPONSE_CANCEL,
+                                         GTK_STOCK_SAVE,
+                                         GTK_RESPONSE_ACCEPT,
+                                         NULL);
+
+    if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT)
+    {
+        const char * filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+
+        if (rdg_save_to_png(rdgwindow->rdg, filename)) {
+            gui_console(rdgwindow->gui, "error saving rdis graph as png");
+        }
+        else {
+            gui_console(rdgwindow->gui, "Rdis graph saved");
+        }
+    }
+
+    gtk_widget_destroy(dialog);
 }

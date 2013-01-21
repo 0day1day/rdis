@@ -86,6 +86,8 @@ void     rdgwindow_size_allocate_event        (GtkWidget * widget,
                                                GdkRectangle * allocation,
                                                struct _rdgwindow * rdgwindow);
 
+void rdgwindow_center_on_node (struct _rdgwindow * rdgwindow, uint64_t index);
+
 void rdgwindow_reset_node_colors (struct _rdgwindow * rdgwindow);
 void rdgwindow_color_node        (struct _rdgwindow * rdgwindow);
 void rdgwindow_color_node_predecessors (struct _rdgwindow * rdgwindow);
@@ -97,5 +99,5 @@ void rdgwindow_user_function (GtkMenuItem * menuItem,
                               struct _rdgwindow * rdgwindow);
 void rdgwindow_remove_all_after (GtkMenuItem * menuItem,
                                  struct _rdgwindow * rdgwindow);
-
+void rdgwindow_save (struct _rdgwindow * rdgwindow);
 #endif
