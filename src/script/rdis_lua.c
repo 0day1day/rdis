@@ -56,6 +56,16 @@ static const struct luaL_Reg rl_graph_node_lib_m [] = {
 };
 
 
+static const struct luaL_Reg rl_rdg_lib_m [] = {
+    {"__gc",           rl_rdg_gc},
+    {"save_png",       rl_rdg_save_png},
+    {"node_by_coords", rl_rdg_node_by_coords},
+    {"ins_by_coords",  rl_rdg_ins_by_coords},
+    {"highlight_ins",  rl_rdg_highlight_ins},
+    {NULL, NULL}
+};
+
+
 static const struct luaL_Reg rl_rdis_lib_f [] = {
     {"console",            rl_rdis_console},
     {"functions",          rl_rdis_functions},
@@ -70,6 +80,7 @@ static const struct luaL_Reg rl_rdis_lib_f [] = {
     {"sha256",             rl_rdis_sha256},
     {"user_function",      rl_rdis_user_function},
     {"dump_json",          rl_rdis_dump_json},
+    {"rdg",                rl_rdis_rdg},
     {NULL, NULL}
 };
 
@@ -105,6 +116,12 @@ struct _rdis_lua * rdis_lua_create (struct _rdis * rdis)
 
     luaL_newmetatable(rdis_lua->L, "rdis.graph_node");
     luaL_register(rdis_lua->L, NULL, rl_graph_node_lib_m);
+    lua_pushstring(rdis_lua->L, "__index");
+    lua_pushvalue(rdis_lua->L, -2);
+    lua_settable(rdis_lua->L, -3);
+
+    luaL_newmetatable(rdis_lua->L, "rdis.rdg");
+    luaL_register(rdis_lua->L, NULL, rl_rdg_lib_m);
     lua_pushstring(rdis_lua->L, "__index");
     lua_pushvalue(rdis_lua->L, -2);
     lua_settable(rdis_lua->L, -3);
@@ -587,6 +604,134 @@ int rl_graph_node_instructions (lua_State * L)
 
 
 /****************************************************************
+* rl_rdg
+****************************************************************/
+
+// this does not copy the rdg, so lua keeps the rdg, forever until death
+// rdg_draw should be called on the rdg before it is passed to lua
+int rl_rdg_push (lua_State * L, struct _rdg * rdg)
+{
+    struct _rdg ** rdg_ptr;
+    rdg_ptr = lua_newuserdata(L, sizeof(struct _rdg * ));
+    luaL_getmetatable(L, "rdis.rdg");
+    lua_setmetatable(L, -2);
+
+    *rdg_ptr = rdg;
+
+    return 1;
+}
+
+
+struct _rdg * rl_check_rdg (lua_State * L, int position)
+{
+    void ** data = luaL_checkudata(L, position, "rdis.rdg");
+    luaL_argcheck(L, data != NULL, position, "expected rdg");
+    return *((struct _rdg **) data);
+}
+
+
+int rl_rdg_gc (lua_State * L)
+{
+    struct _rdg * rdg = rl_check_rdg(L, -1);
+    lua_pop(L, 1);
+
+    object_delete(rdg);
+
+    return 0;
+}
+
+
+int rl_rdg_save_png (lua_State * L)
+{
+    struct _rdg * rdg      = rl_check_rdg(L, -2);
+    const char  * filename = luaL_checkstring(L, -1);
+
+    rdg_save_to_png(rdg, filename);
+
+    lua_pop(L, 2);
+
+    return 0;
+}
+
+
+int rl_rdg_node_by_coords (lua_State * L)
+{
+    struct _rdis_lua * rdis_lua = rl_get_rdis_lua(L);
+
+    struct _rdg * rdg = rl_check_rdg(L, -3);
+    int           x   = luaL_checkinteger(L, -2);
+    int           y   = luaL_checkinteger(L, -1);
+
+    lua_pop(L, 3);
+
+    uint64_t address = rdg_get_node_by_coords(rdg, x, y);
+
+    struct _graph_node * node = graph_fetch_node(rdis_lua->rdis->graph, address);
+
+    if (node == NULL)
+        lua_pushnil(L);
+    else
+        rl_graph_node_push(L, node);
+    
+    return 1;
+}
+
+
+int rl_rdg_ins_by_coords (lua_State * L)
+{
+    struct _rdis_lua * rdis_lua = rl_get_rdis_lua(L);
+
+    struct _rdg * rdg = rl_check_rdg(L, -3);
+    int           x   = luaL_checkinteger(L, -2);
+    int           y   = luaL_checkinteger(L, -1);
+
+    lua_pop(L, 3);
+
+    uint64_t address = rdg_get_ins_by_coords(rdg,
+                                             rdis_lua->rdis->graph,
+                                             rdis_lua->rdis->labels,
+                                             x, y);
+
+    struct _ins * ins = graph_fetch_ins(rdis_lua->rdis->graph, address);
+    
+    if (ins == NULL)
+        lua_pushnil(L);
+    else
+        rl_ins_push(L, ins);
+
+    return 1;
+}
+
+
+int rl_rdg_highlight_ins (lua_State * L)
+{
+    struct _rdis_lua * rdis_lua = rl_get_rdis_lua(L);
+
+    struct _rdg * rdg     = rl_check_rdg(L, -3);
+    uint64_t   node_index = rl_check_uint64(L, -2);
+    uint64_t  ins_address = rl_check_uint64(L, -1);
+
+    struct _list * highlight_list = list_create();
+    struct _rdg_node_color * node_color;
+    node_color = rdg_node_color_create(node_index, 1.0, 0.9, 0.9);
+    list_append(highlight_list, node_color);
+
+    rdg_custom_nodes(rdg,
+                     rdis_lua->rdis->graph,
+                     rdis_lua->rdis->labels,
+                     highlight_list,
+                     ins_address);
+    rdg_draw(rdg);
+
+    object_delete(highlight_list);
+
+    lua_pop(L, 3);
+
+    return 0;
+}
+
+
+/****************************************************************
 * rl_rdis
 ****************************************************************/
 
@@ -928,4 +1073,33 @@ int rl_rdis_dump_json (lua_State * L)
     json_decref(json);
 
     return 1;
+}
+
+
+int rl_rdis_rdg (lua_State * L)
+{
+    struct _rdis_lua * rdis_lua = rl_get_rdis_lua(L);
+
+    uint64_t     address  = rl_check_uint64(L, -1);
+
+    struct _graph * family = graph_family(rdis_lua->rdis->graph, address);
+
+    if (family == NULL) {
+        char tmp[128];
+        snprintf(tmp, 128, "Could not find graph for function %llx",
+                 (unsigned long long) address);
+        luaL_error(L, tmp);
+        lua_pop(L, 1);
+        return 0;
+    }
+    else {
+        struct _rdg * rdg = rdg_create(address, family, rdis_lua->rdis->labels);
+        rdg_draw(rdg);
+
+        lua_pop(L, 1);
+        rl_rdg_push(L, rdg);
+
+        object_delete(family);
+        return 1;
+    }
 }
