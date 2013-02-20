@@ -5,8 +5,14 @@
 #include "label.h"
 #include "lua.h"
 #include "map.h"
+#include "rdgwindow.h"
 #include "tree.h"
 #include "util.h"
+
+#include "rl_redis_x86.h"
+
+// HACK_STUFF for redis
+#include "redis_x86.h"
 
 #include <openssl/sha.h>
 #include <stdlib.h>
@@ -39,6 +45,15 @@ static const struct luaL_Reg rl_ins_lib_m [] = {
 };
 
 
+static const struct luaL_Reg rl_graph_lib_m [] = {
+    {"__gc",    rl_graph_edge_gc},
+    {"reduce",  rl_graph_reduce},
+    {"family",  rl_graph_family},
+    {"display", rl_graph_display},
+    {NULL, NULL}
+};
+
+
 static const struct luaL_Reg rl_graph_edge_lib_m [] = {
     {"__gc",    rl_graph_edge_gc},
     {"head",    rl_graph_edge_head},
@@ -52,6 +67,17 @@ static const struct luaL_Reg rl_graph_node_lib_m [] = {
     {"index",        rl_graph_node_index},
     {"edges",        rl_graph_node_edges},
     {"instructions", rl_graph_node_instructions},
+    {NULL, NULL}
+};
+
+
+static const struct luaL_Reg rl_redis_x86_lib_m [] = {
+    {"__gc",         rl_redis_x86_gc},
+    {"variables",    rl_redis_x86_variables},
+    {"graph",        rl_redis_x86_graph},
+    {"step",         rl_redis_x86_step},
+    {"set_variable", rl_redis_x86_set_variable},
+    {"false_stack",  rl_redis_x86_false_stack},
     {NULL, NULL}
 };
 
@@ -81,6 +107,7 @@ static const struct luaL_Reg rl_rdis_lib_f [] = {
     {"user_function",      rl_rdis_user_function},
     {"dump_json",          rl_rdis_dump_json},
     {"rdg",                rl_rdis_rdg},
+    {"redis_x86" ,         rl_rdis_redis_x86},
     {NULL, NULL}
 };
 
@@ -108,6 +135,12 @@ struct _rdis_lua * rdis_lua_create (struct _rdis * rdis)
     lua_pushvalue(rdis_lua->L, -2);
     lua_settable(rdis_lua->L, -3);
 
+    luaL_newmetatable(rdis_lua->L, "rdis.graph");
+    luaL_register(rdis_lua->L, NULL, rl_graph_lib_m);
+    lua_pushstring(rdis_lua->L, "__index");
+    lua_pushvalue(rdis_lua->L, -2);
+    lua_settable(rdis_lua->L, -3);
+
     luaL_newmetatable(rdis_lua->L, "rdis.graph_edge");
     luaL_register(rdis_lua->L, NULL, rl_graph_edge_lib_m);
     lua_pushstring(rdis_lua->L, "__index");
@@ -116,6 +149,12 @@ struct _rdis_lua * rdis_lua_create (struct _rdis * rdis)
 
     luaL_newmetatable(rdis_lua->L, "rdis.graph_node");
     luaL_register(rdis_lua->L, NULL, rl_graph_node_lib_m);
+    lua_pushstring(rdis_lua->L, "__index");
+    lua_pushvalue(rdis_lua->L, -2);
+    lua_settable(rdis_lua->L, -3);
+
+    luaL_newmetatable(rdis_lua->L, "rdis.redis_x86");
+    luaL_register(rdis_lua->L, NULL, rl_redis_x86_lib_m);
     lua_pushstring(rdis_lua->L, "__index");
     lua_pushvalue(rdis_lua->L, -2);
     lua_settable(rdis_lua->L, -3);
@@ -456,6 +495,86 @@ int rl_ins_comment (lua_State * L)
         lua_pushstring(L, ins->comment);
 
     return 1;
+}
+
+
+/****************************************************************
+* rl_graph
+****************************************************************/
+
+
+int rl_graph_push (lua_State * L, struct _graph * graph)
+{
+    struct _graph ** graph_ptr;
+    graph_ptr = lua_newuserdata(L, sizeof(struct _graph *));
+    luaL_getmetatable(L, "rdis.graph");
+    lua_setmetatable(L, -2);
+
+    *graph_ptr = object_copy(graph);
+
+    return 1;
+}
+
+
+struct _graph * rl_check_graph (lua_State * L, int position)
+{
+    void ** data = luaL_checkudata(L, position, "rdis.graph");
+    luaL_argcheck(L, data != NULL, position, "expected graph");
+    return *((struct _graph **) data);
+}
+
+
+int rl_graph_gc (lua_State * L)
+{
+    struct _graph * graph = rl_check_graph(L, -1);
+    lua_pop(L, 1);
+
+    object_delete(graph);
+
+    return 0;
+}
+
+
+int rl_graph_reduce (lua_State * L)
+{
+    struct _graph * graph = rl_check_graph(L, -1);
+
+    graph_reduce(graph);
+
+    lua_pop(L, 1);
+    return 0;
+}
+
+
+int rl_graph_family (lua_State * L)
+{
+    uint64_t index        = rl_check_uint64(L, -1);
+    struct _graph * graph = rl_check_graph(L, -2);
+
+    struct _graph * family = graph_family(graph, index);
+
+    lua_pop(L, 2);
+
+    rl_graph_push(L, family);
+
+    return 1;
+}
+
+
+int rl_graph_display (lua_State * L)
+{
+    struct _rdis_lua * rdis_lua = rl_get_rdis_lua(L);
+
+    uint64_t        index = rl_check_uint64(L, -2);
+    struct _graph * graph = rl_check_graph(L, -1);
+
+    lua_pop(L, 2);
+
+    printf("rdis: %p gui: %p\n", rdis_lua->rdis, rdis_lua->rdis->gui);
+
+    gui_rdgwindow(rdis_lua->rdis->gui, graph, RDGWINDOW_INS_GRAPH, index);
+
+    return 0;
 }
 
 
@@ -1080,7 +1199,7 @@ int rl_rdis_rdg (lua_State * L)
 {
     struct _rdis_lua * rdis_lua = rl_get_rdis_lua(L);
 
-    uint64_t     address  = rl_check_uint64(L, -1);
+    uint64_t address = rl_check_uint64(L, -1);
 
     struct _graph * family = graph_family(rdis_lua->rdis->graph, address);
 
@@ -1102,4 +1221,19 @@ int rl_rdis_rdg (lua_State * L)
         object_delete(family);
         return 1;
     }
+}
+
+
+int rl_rdis_redis_x86 (lua_State * L)
+{
+    struct _rdis_lua * rdis_lua = rl_get_rdis_lua(L);
+
+    struct _redis_x86 * redis_x86 = redis_x86_create();
+    redis_x86_mem_from_mem_map(redis_x86, rdis_lua->rdis->memory);
+
+    rl_redis_x86_push(L, redis_x86);
+
+    object_delete(redis_x86);
+
+    return 1;
 }
